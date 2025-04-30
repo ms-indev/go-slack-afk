@@ -74,15 +74,19 @@ func (c *LunchCommand) Execute(cmd slack.SlashCommand) error {
 		return err
 	}
 
+	// Get JST time
+	jst, _ := time.LoadLocation("Asia/Tokyo")
+	now := time.Now().In(jst)
+
 	// Save last lunch date
-	userPresence["last_lunch_date"] = time.Now().Format(time.RFC3339)
+	userPresence["last_lunch_date"] = now.Format(time.RFC3339)
 	if err := c.redisClient.SetUserPresence(uid, userPresence); err != nil {
 		slog.Error("Failed to set user presence", slog.Any("error", err))
 		return err
 	}
 
 	// Response message
-	returnTime := time.Now().Add(1 * time.Hour).Format("15:04")
+	returnTime := now.Add(1 * time.Hour).Format("15:04")
 	_, err = c.client.PostEphemeral(channelID, uid, slack.MsgOptionText(fmt.Sprintf("行ってらっしゃい!!1 %sに自動で解除します", returnTime), false))
 	if err != nil {
 		slog.Error("Failed to post ephemeral message", slog.Any("error", err))

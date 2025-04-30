@@ -44,7 +44,9 @@ func (c *StartCommand) Execute(cmd slack.SlashCommand) error {
 	}
 
 	// Set today's begin time
-	userPresence["today_begin"] = time.Now().Format(time.RFC3339)
+	jst, _ := time.LoadLocation("Asia/Tokyo")
+	now := time.Now().In(jst)
+	userPresence["today_begin"] = now.Format(time.RFC3339)
 	if err := c.redisClient.SetUserPresence(uid, userPresence); err != nil {
 		slog.Error("Failed to set user presence", slog.Any("error", err))
 		return err
