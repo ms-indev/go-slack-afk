@@ -53,8 +53,9 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 	}
 
 	// Calculate expiration time (until 9:00 AM tomorrow)
-	now := time.Now()
-	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, now.Location())
+	jst, _ := time.LoadLocation("Asia/Tokyo")
+	now := time.Now().In(jst)
+	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, jst)
 	expireDuration := tomorrow.Sub(now)
 	if err := c.redisClient.Expire(uid, expireDuration); err != nil {
 		slog.Error("Failed to set expiration", slog.Any("error", err))
@@ -69,7 +70,7 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 	}
 
 	// Set today's end time
-	userPresence["today_end"] = time.Now().Format(time.RFC3339)
+	userPresence["today_end"] = now.Format(time.RFC3339)
 	if err := c.redisClient.SetUserPresence(uid, userPresence); err != nil {
 		slog.Error("Failed to set user presence", slog.Any("error", err))
 		return err

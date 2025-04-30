@@ -59,8 +59,10 @@ func (r *RedisClient) GetUserPresence(uid string) (map[string]interface{}, error
 	key := uid + "-store"
 	val, err := r.client.Get(ctx, key).Result()
 	if err == redis.Nil {
+		jst, _ := time.LoadLocation("Asia/Tokyo")
+		now := time.Now().In(jst)
 		return map[string]interface{}{
-			"last_active_start_time": time.Now().Format(time.RFC3339),
+			"last_active_start_time": now.Format(time.RFC3339),
 		}, nil
 	} else if err != nil {
 		return nil, err
