@@ -47,7 +47,8 @@
                 "app_mentions:read",
                 "chat:write",
                 "commands",
-                "channels:history"
+                "channels:history",
+                "groups:history"
             ]
         }
     },
@@ -55,7 +56,8 @@
         "event_subscriptions": {
             "bot_events": [
                 "app_mention",
-                "message.channels"
+                "message.channels",
+                "groups:history"
             ]
         },
         "interactivity": {
