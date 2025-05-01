@@ -30,9 +30,9 @@ func (c *StartCommand) Execute(cmd slack.SlashCommand) error {
 	userName := cmd.UserName
 	channelID := cmd.ChannelID
 
-	// Add user to registered list
-	if err := c.redisClient.AddToList("registered", uid); err != nil {
-		slog.Error("Failed to add user to registered list", slog.Any("error", err))
+	// Remove user from registered list
+	if err := c.redisClient.RemoveFromList("registered", uid); err != nil {
+		slog.Error("Failed to remove user from registered list", slog.Any("error", err))
 		return err
 	}
 
