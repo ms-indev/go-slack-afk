@@ -253,47 +253,50 @@ for i, row := range resp.Values[1:] {
 		}
 	}
 	for date, finishRows := range dateToRows {
-		for _, finishRow := range finishRows {
-			// その日分の全行を抽出
-			var (
-				startTime, finishTime time.Time
-				breaks [][2]time.Time
-			)
-			for _, rw := range validRows {
-				row := rw.row
-				if len(row) < 3 { continue }
-				rowDate, t := fmt.Sprint(row[0]), fmt.Sprint(row[2])
-				if rowDate != date { continue }
-				ts, _ := time.ParseInLocation("15:04:05", fmt.Sprint(row[1]), time.Local)
-				ts = time.Date(0,1,1,ts.Hour(),ts.Minute(),ts.Second(),0,time.Local)
-				switch t {
-				case TypeStart:
-					startTime = ts
-				case TypeFinish:
-					finishTime = ts
-				case TypeLunch, TypeAfk:
-					breaks = append(breaks, [2]time.Time{ts, {}})
-				case TypeComeback:
-					if len(breaks) > 0 && breaks[len(breaks)-1][1].IsZero() {
-						breaks[len(breaks)-1][1] = ts
-					}
+		if len(finishRows) == 0 {
+			continue
+		}
+		// 最新の退勤行だけ
+		finishRow := finishRows[len(finishRows)-1]
+		// その日分の全行を抽出
+		var (
+			startTime, finishTime time.Time
+			breaks [][2]time.Time
+		)
+		for _, rw := range validRows {
+			row := rw.row
+			if len(row) < 3 { continue }
+			rowDate, t := fmt.Sprint(row[0]), fmt.Sprint(row[2])
+			if rowDate != date { continue }
+			ts, _ := time.ParseInLocation("15:04:05", fmt.Sprint(row[1]), time.Local)
+			ts = time.Date(0,1,1,ts.Hour(),ts.Minute(),ts.Second(),0,time.Local)
+			switch t {
+			case TypeStart:
+				startTime = ts
+			case TypeFinish:
+				finishTime = ts
+			case TypeLunch, TypeAfk:
+				breaks = append(breaks, [2]time.Time{ts, {}})
+			case TypeComeback:
+				if len(breaks) > 0 && breaks[len(breaks)-1][1].IsZero() {
+					breaks[len(breaks)-1][1] = ts
 				}
 			}
-			if startTime.IsZero() || finishTime.IsZero() { continue }
-			var breakDur time.Duration
-			for _, b := range breaks {
-				if !b[0].IsZero() && !b[1].IsZero() {
-					breakDur += b[1].Sub(b[0])
-				}
+		}
+		if startTime.IsZero() || finishTime.IsZero() { continue }
+		var breakDur time.Duration
+		for _, b := range breaks {
+			if !b[0].IsZero() && !b[1].IsZero() {
+				breakDur += b[1].Sub(b[0])
 			}
-			workDur := finishTime.Sub(startTime) - breakDur
-			if workDur < 0 { workDur = 0 }
-			workStr := fmt.Sprintf("%d:%02d", int(workDur.Hours()), int(workDur.Minutes())%60)
-			cell := fmt.Sprintf("E%d", validRows[finishRow].origIdx+1) // +1: 1-indexed
-			_, err := srv.Spreadsheets.Values.Update(spreadsheetID, sheetName+"!"+cell, &sheets.ValueRange{Values: [][]interface{}{{workStr}}}).ValueInputOption("RAW").Do()
-			if err != nil {
-				return fmt.Errorf("実働時間書き込み失敗: %w", err)
-			}
+		}
+		workDur := finishTime.Sub(startTime) - breakDur
+		if workDur < 0 { workDur = 0 }
+		workStr := fmt.Sprintf("%d:%02d", int(workDur.Hours()), int(workDur.Minutes())%60)
+		cell := fmt.Sprintf("E%d", validRows[finishRow].origIdx+1) // +1: 1-indexed
+		_, err := srv.Spreadsheets.Values.Update(spreadsheetID, sheetName+"!"+cell, &sheets.ValueRange{Values: [][]interface{}{{workStr}}}).ValueInputOption("RAW").Do()
+		if err != nil {
+			return fmt.Errorf("実働時間書き込み失敗: %w", err)
 		}
 	}
 	return nil
