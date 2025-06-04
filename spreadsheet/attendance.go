@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+	"strings"
+	"strconv"
 
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -34,28 +36,28 @@ func AppendAttendanceRecord(slackClient *slack.Client, userID, recordType, messa
 
 	spreadsheetID := os.Getenv(spreadsheetIDEnv)
 	if spreadsheetID == "" {
-		return fmt.Errorf("環境変数 %s が未設定です", spreadsheetIDEnv)
+		return 0, fmt.Errorf("環境変数 %s が未設定です", spreadsheetIDEnv)
 	}
 
 	// Google Sheets API認証
 	b, err := os.ReadFile("credentials.json")
 	if err != nil {
-		return fmt.Errorf("credentials.jsonの読み込みに失敗: %w", err)
+		return 0, fmt.Errorf("credentials.jsonの読み込みに失敗: %w", err)
 	}
 	config, err := google.JWTConfigFromJSON(b, sheets.SpreadsheetsScope)
 	if err != nil {
-		return fmt.Errorf("Google認証情報のパースに失敗: %w", err)
+		return 0, fmt.Errorf("Google認証情報のパースに失敗: %w", err)
 	}
 	ts := config.TokenSource(ctx)
 	srv, err := sheets.NewService(ctx, option.WithTokenSource(ts))
 	if err != nil {
-		return fmt.Errorf("Sheets APIクライアント生成失敗: %w", err)
+		return 0, fmt.Errorf("Sheets APIクライアント生成失敗: %w", err)
 	}
 
 	// Slackユーザー情報取得
 	profile, err := slackClient.GetUserProfile(&slack.GetUserProfileParameters{UserID: userID})
 	if err != nil {
-		return fmt.Errorf("Slackユーザープロフィール取得失敗: %w", err)
+		return 0, fmt.Errorf("Slackユーザープロフィール取得失敗: %w", err)
 	}
 	sheetName := profile.FirstName + profile.LastName
 	if sheetName == "" {
@@ -74,18 +76,18 @@ func AppendAttendanceRecord(slackClient *slack.Client, userID, recordType, messa
 	// シート存在確認＆なければ作成
 	exists, err := sheetExists(srv, spreadsheetID, sheetName)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !exists {
 		if err := createSheet(srv, spreadsheetID, sheetName); err != nil {
-			return err
+			return 0, err
 		}
 		// ヘッダー行追加
 		header := []interface{}{ "日付", "時刻", "種別", "メッセージ", "実働時間（h:mm）" }
 		vr := &sheets.ValueRange{ Values: [][]interface{}{ header } }
 		_, err := srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1", vr).ValueInputOption("RAW").Do()
 		if err != nil {
-			return fmt.Errorf("ヘッダー追加失敗: %w", err)
+			return 0, fmt.Errorf("ヘッダー追加失敗: %w", err)
 		}
 	}
 

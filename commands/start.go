@@ -74,7 +74,7 @@ func (c *StartCommand) Execute(cmd slack.SlashCommand) error {
 
 	// 勤怠記録（エラーはログのみ）
 	go func() {
-		err := spreadsheet.AppendAttendanceRecord(c.client, uid, spreadsheet.TypeStart, "")
+		_, err := spreadsheet.AppendAttendanceRecord(c.client, uid, spreadsheet.TypeStart, "")
 		if err != nil {
 			slog.Error("スプレッドシート勤怠記録失敗", slog.Any("error", err))
 		}
