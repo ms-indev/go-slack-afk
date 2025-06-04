@@ -5,10 +5,11 @@ import (
 	"log/slog"
 	"os"
 	"time"
+
 	"github.com/pyama86/slack-afk/go/presentation/blocks"
+	"github.com/pyama86/slack-afk/go/spreadsheet"
 	"github.com/pyama86/slack-afk/go/store"
 	"github.com/slack-go/slack"
-	"github.com/pyama86/slack-afk/go/spreadsheet"
 )
 
 // FinishCommand handles the /finish command
@@ -113,6 +114,14 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 		err := spreadsheet.AppendAttendanceRecord(c.client, uid, spreadsheet.TypeFinish, text)
 		if err != nil {
 			slog.Error("スプレッドシート勤怠記録失敗", slog.Any("error", err))
+		}
+	}()
+
+	// 実働時間の計算・記入（エラーはログのみ）
+	go func() {
+		err := spreadsheet.UpdateActualWorkTime(c.client, uid)
+		if err != nil {
+			slog.Error("スプレッドシート実働時間記入失敗", slog.Any("error", err))
 		}
 	}()
 
