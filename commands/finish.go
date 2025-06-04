@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/pyama86/slack-afk/go/presentation/blocks"
@@ -176,8 +177,8 @@ func writeFinishToSheet(spreadsheetID, sheetName, dateStr, finishTimeStr, remark
 			return fmt.Errorf("シート作成失敗: %w", err)
 		}
 		// ヘッダー行を追加
-		headers := [][]interface{}{{"日付", "出勤時刻", "退勤時刻", "休憩時間", "備考"}}
-		_, err = srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1:E1", &sheets.ValueRange{Values: headers}).ValueInputOption("USER_ENTERED").Do()
+		headers := [][]interface{}{{"日付", "出勤時刻", "退勤時刻", "休憩時間", "備考", "実働時間"}}
+		_, err = srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1:F1", &sheets.ValueRange{Values: headers}).ValueInputOption("USER_ENTERED").Do()
 		if err != nil {
 			return fmt.Errorf("ヘッダー追加失敗: %w", err)
 		}
@@ -200,30 +201,55 @@ func writeFinishToSheet(spreadsheetID, sheetName, dateStr, finishTimeStr, remark
 	var row []interface{}
 	if rowIndex > 0 {
 		// 既存行を取得して退勤時刻・備考を上書き
-		getRange := fmt.Sprintf("%s!A%d:E%d", sheetName, rowIndex, rowIndex)
+		getRange := fmt.Sprintf("%s!A%d:F%d", sheetName, rowIndex, rowIndex)
 		getResp, err := srv.Spreadsheets.Values.Get(spreadsheetID, getRange).Do()
 		if err != nil || len(getResp.Values) == 0 {
-			// 取得失敗時は新規作成
-			row = []interface{}{dateStr, "", finishTimeStr, "", remark}
+			row = []interface{}{dateStr, "", finishTimeStr, "", remark, ""}
 		} else {
 			row = getResp.Values[0]
 			// 必要な長さに調整
-			for len(row) < 5 {
+			for len(row) < 6 {
 				row = append(row, "")
 			}
 			row[2] = finishTimeStr
 			row[4] = remark
 		}
 		// 上書き
-		updateRange := fmt.Sprintf("%s!A%d:E%d", sheetName, rowIndex, rowIndex)
+		updateRange := fmt.Sprintf("%s!A%d:F%d", sheetName, rowIndex, rowIndex)
 		_, err = srv.Spreadsheets.Values.Update(spreadsheetID, updateRange, &sheets.ValueRange{Values: [][]interface{}{row}}).ValueInputOption("USER_ENTERED").Do()
 		if err != nil {
 			return fmt.Errorf("既存行上書き失敗: %w", err)
 		}
+		// 出勤・退勤が揃ったら実働時間をhh:mmで記録
+		bStr, cStr := "", ""
+		if len(row) > 1 {
+			bStr = fmt.Sprintf("%v", row[1])
+		}
+		if len(row) > 2 {
+			cStr = fmt.Sprintf("%v", row[2])
+		}
+		if bStr != "" && cStr != "" {
+			bTime, err1 := time.Parse("15:04:05", bStr)
+			cTime, err2 := time.Parse("15:04:05", cStr)
+			if err1 == nil && err2 == nil {
+				dMin := 0
+				if len(row) > 3 && fmt.Sprintf("%v", row[3]) != "" {
+					dMin, _ = strconv.Atoi(fmt.Sprintf("%v", row[3]))
+				}
+				workMin := int(cTime.Sub(bTime).Minutes()) - dMin
+				if workMin < 0 {
+					workMin = 0
+				}
+				hh := workMin / 60
+				mm := workMin % 60
+				fRange := fmt.Sprintf("%s!F%d", sheetName, rowIndex)
+				_, _ = srv.Spreadsheets.Values.Update(spreadsheetID, fRange, &sheets.ValueRange{Values: [][]interface{}{{fmt.Sprintf("%02d:%02d", hh, mm)}}}).ValueInputOption("USER_ENTERED").Do()
+			}
+		}
 	} else {
 		// 追記
-		row = []interface{}{dateStr, "", finishTimeStr, "", remark}
-		appendRange := fmt.Sprintf("%s!A:E", sheetName)
+		row = []interface{}{dateStr, "", finishTimeStr, "", remark, ""}
+		appendRange := fmt.Sprintf("%s!A:F", sheetName)
 		_, err = srv.Spreadsheets.Values.Append(spreadsheetID, appendRange, &sheets.ValueRange{Values: [][]interface{}{row}}).ValueInputOption("USER_ENTERED").Do()
 		if err != nil {
 			return fmt.Errorf("行追加失敗: %w", err)
