@@ -178,16 +178,25 @@ func CancelLastRecord(slackClient *slack.Client, userID string) (bool, string, s
 		origType := typ
 		origMsg := ""
 		if len(row) > 3 { origMsg = fmt.Sprint(row[3]) }
-		// 取消履歴として「取消」種別＋取消対象行番号をメッセージ欄に記録
+		// 取消履歴として「取消」種別＋取消対象行番号・種別・時刻をメッセージ欄に記録
 		jst, _ := time.LoadLocation("Asia/Tokyo")
 		now := time.Now().In(jst)
 		dateStr := now.Format("2006-01-02")
 		timeStr := now.Format("15:04:05")
-		cancelRow := []interface{}{dateStr, timeStr, TypeCancel, fmt.Sprintf("%d", i+1), ""}
+		cancelMsg := fmt.Sprintf("行%d(%s %s)", i+1, typ, row[1])
+		cancelRow := []interface{}{dateStr, timeStr, TypeCancel, cancelMsg, ""}
 		vr := &sheets.ValueRange{Values: [][]interface{}{cancelRow}}
 		_, err := srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1", vr).ValueInputOption("RAW").Do()
 		if err != nil {
 			return false, "", "", fmt.Errorf("取消履歴追加失敗: %w", err)
+		}
+		// 退勤行なら実働時間セルをクリア
+		if typ == TypeFinish {
+			cell := fmt.Sprintf("E%d", i+1)
+			_, err := srv.Spreadsheets.Values.Update(spreadsheetID, sheetName+"!"+cell, &sheets.ValueRange{Values: [][]interface{}{{""}}}).ValueInputOption("RAW").Do()
+			if err != nil {
+				return false, "", "", fmt.Errorf("実働時間セルクリア失敗: %w", err)
+			}
 		}
 		return true, origType, origMsg, nil
 	}
