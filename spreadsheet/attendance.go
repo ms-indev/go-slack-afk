@@ -231,16 +231,21 @@ func UpdateActualWorkTime(slackClient *slack.Client, userID string) error {
 			}
 		}
 	}
-	var validRows [][]interface{}
-	for i, row := range resp.Values[1:] {
-		if cancelledRows[i] { continue }
-		if len(row) < 3 { continue }
-		if fmt.Sprint(row[2]) == TypeCancel { continue }
-		validRows = append(validRows, row)
-	}
+	type rowWithIndex struct {
+	row     []interface{}
+	origIdx int
+}
+var validRows []rowWithIndex
+for i, row := range resp.Values[1:] {
+	if cancelledRows[i] { continue }
+	if len(row) < 3 { continue }
+	if fmt.Sprint(row[2]) == TypeCancel { continue }
+	validRows = append(validRows, rowWithIndex{row, i+1}) // +1: ヘッダー分
+}
 	// 日付ごとに最新の退勤行を探す
 	dateToRows := map[string][]int{}
-	for i, row := range validRows {
+	for i, rw := range validRows {
+		row := rw.row
 		if len(row) < 3 { continue }
 		date, typ := fmt.Sprint(row[0]), fmt.Sprint(row[2])
 		if typ == TypeFinish {
@@ -254,7 +259,8 @@ func UpdateActualWorkTime(slackClient *slack.Client, userID string) error {
 				startTime, finishTime time.Time
 				breaks [][2]time.Time
 			)
-			for _, row := range validRows {
+			for _, rw := range validRows {
+				row := rw.row
 				if len(row) < 3 { continue }
 				rowDate, t := fmt.Sprint(row[0]), fmt.Sprint(row[2])
 				if rowDate != date { continue }
@@ -283,7 +289,7 @@ func UpdateActualWorkTime(slackClient *slack.Client, userID string) error {
 			workDur := finishTime.Sub(startTime) - breakDur
 			if workDur < 0 { workDur = 0 }
 			workStr := fmt.Sprintf("%d:%02d", int(workDur.Hours()), int(workDur.Minutes())%60)
-			cell := fmt.Sprintf("E%d", finishRow+2) // +2: 1-indexed + ヘッダー
+			cell := fmt.Sprintf("E%d", validRows[finishRow].origIdx+1) // +1: 1-indexed
 			_, err := srv.Spreadsheets.Values.Update(spreadsheetID, sheetName+"!"+cell, &sheets.ValueRange{Values: [][]interface{}{{workStr}}}).ValueInputOption("RAW").Do()
 			if err != nil {
 				return fmt.Errorf("実働時間書き込み失敗: %w", err)
