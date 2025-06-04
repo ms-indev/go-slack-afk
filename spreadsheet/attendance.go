@@ -28,7 +28,8 @@ const (
 
 // 勤怠レコード
 // messageは任意
-func AppendAttendanceRecord(slackClient *slack.Client, userID, recordType, message string) error {
+// 追加した行番号（1-indexed）を返す
+func AppendAttendanceRecord(slackClient *slack.Client, userID, recordType, message string) (int, error) {
 	ctx := context.Background()
 
 	spreadsheetID := os.Getenv(spreadsheetIDEnv)
@@ -91,11 +92,27 @@ func AppendAttendanceRecord(slackClient *slack.Client, userID, recordType, messa
 	// 勤怠レコード追加
 	row := []interface{}{ dateStr, timeStr, recordType, message, "" }
 	vr := &sheets.ValueRange{ Values: [][]interface{}{ row } }
-	_, err = srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1", vr).ValueInputOption("RAW").Do()
+	respAppend, err := srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1", vr).ValueInputOption("RAW").InsertDataOption("INSERT_ROWS").Do()
 	if err != nil {
-		return fmt.Errorf("勤怠レコード追加失敗: %w", err)
+		return 0, fmt.Errorf("勤怠レコード追加失敗: %w", err)
 	}
-	return nil
+	// 追加された行番号を推定（APIのレスポンスから）
+	rowNum := 0
+	if respAppend != nil && respAppend.Updates != nil && respAppend.Updates.UpdatedRange != "" {
+		// 例: "シート名!A10:E10" → 10
+		parts := strings.Split(respAppend.Updates.UpdatedRange, "!")
+		if len(parts) == 2 {
+			rowRange := parts[1]
+			rowParts := strings.Split(rowRange, ":")
+			if len(rowParts) == 2 {
+				rowStr := strings.TrimLeft(rowParts[0], "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+				if n, err := strconv.Atoi(rowStr); err == nil {
+					rowNum = n
+				}
+			}
+		}
+	}
+	return rowNum, nil
 }
 
 // 直近の有効な記録を取消し、取消履歴を残す
@@ -177,7 +194,8 @@ func CancelLastRecord(slackClient *slack.Client, userID string) (bool, string, s
 
 // /finish時に実働時間を計算して記入
 // 取消履歴・取消対象は無視して有効な記録のみで計算
-func UpdateActualWorkTime(slackClient *slack.Client, userID string) error {
+// rowNum: 実働時間を書き込む行番号（1-indexed）。0なら従来通り最新の退勤行を自動判定。
+func UpdateActualWorkTime(slackClient *slack.Client, userID string, rowNum int) error {
 	ctx := context.Background()
 	spreadsheetID := os.Getenv(spreadsheetIDEnv)
 	if spreadsheetID == "" {
@@ -252,7 +270,61 @@ for i, row := range resp.Values[1:] {
 			dateToRows[date] = append(dateToRows[date], i)
 		}
 	}
-	// validRowsの一番下（最新）の退勤行だけに実働時間を書き込む
+	if rowNum > 0 {
+	// 指定された行番号の退勤行だけに実働時間を書き込む
+	idx := rowNum - 2 // 1-indexed, ヘッダー分
+	if idx < 0 || idx >= len(resp.Values)-1 {
+		return nil // 範囲外
+	}
+	row := resp.Values[rowNum-1]
+	if len(row) < 3 || fmt.Sprint(row[2]) != TypeFinish {
+		return nil // 退勤行でなければ何もしない
+	}
+	date := fmt.Sprint(row[0])
+	var (
+		startTime, finishTime time.Time
+		breaks [][2]time.Time
+	)
+	for _, rw := range validRows {
+		r := rw.row
+		if len(r) < 3 { continue }
+		rowDate, t := fmt.Sprint(r[0]), fmt.Sprint(r[2])
+		if rowDate != date { continue }
+		ts, _ := time.ParseInLocation("15:04:05", fmt.Sprint(r[1]), time.Local)
+		ts = time.Date(0,1,1,ts.Hour(),ts.Minute(),ts.Second(),0,time.Local)
+		switch t {
+		case TypeStart:
+			startTime = ts
+		case TypeFinish:
+			finishTime = ts
+		case TypeLunch, TypeAfk:
+			breaks = append(breaks, [2]time.Time{ts, {}})
+		case TypeComeback:
+			if len(breaks) > 0 && breaks[len(breaks)-1][1].IsZero() {
+				breaks[len(breaks)-1][1] = ts
+			}
+		}
+	}
+	if startTime.IsZero() || finishTime.IsZero() {
+		return nil
+	}
+	var breakDur time.Duration
+	for _, b := range breaks {
+		if !b[0].IsZero() && !b[1].IsZero() {
+			breakDur += b[1].Sub(b[0])
+		}
+	}
+	workDur := finishTime.Sub(startTime) - breakDur
+	if workDur < 0 { workDur = 0 }
+	workStr := fmt.Sprintf("%d:%02d", int(workDur.Hours()), int(workDur.Minutes())%60)
+	cell := fmt.Sprintf("E%d", rowNum)
+	_, err = srv.Spreadsheets.Values.Update(spreadsheetID, sheetName+"!"+cell, &sheets.ValueRange{Values: [][]interface{}{{workStr}}}).ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("実働時間書き込み失敗: %w", err)
+	}
+	return nil
+}
+// 旧ロジック（rowNum=0時のみ）
 lastFinishIdx := -1
 for i := len(validRows) - 1; i >= 0; i-- {
 	row := validRows[i].row

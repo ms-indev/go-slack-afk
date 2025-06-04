@@ -109,17 +109,14 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 		return err
 	}
 
-	// 勤怠記録（エラーはログのみ）
+	// 勤怠記録＋実働時間記入（エラーはログのみ）
 	go func() {
-		err := spreadsheet.AppendAttendanceRecord(c.client, uid, spreadsheet.TypeFinish, text)
+		rowNum, err := spreadsheet.AppendAttendanceRecord(c.client, uid, spreadsheet.TypeFinish, text)
 		if err != nil {
 			slog.Error("スプレッドシート勤怠記録失敗", slog.Any("error", err))
+			return
 		}
-	}()
-
-	// 実働時間の計算・記入（エラーはログのみ）
-	go func() {
-		err := spreadsheet.UpdateActualWorkTime(c.client, uid)
+		err = spreadsheet.UpdateActualWorkTime(c.client, uid, rowNum)
 		if err != nil {
 			slog.Error("スプレッドシート実働時間記入失敗", slog.Any("error", err))
 		}
