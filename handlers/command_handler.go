@@ -26,6 +26,7 @@ func NewCommandHandler(client *slack.Client, redisClient *store.RedisClient) *Co
 	h.commands["/start"] = commands.NewStartCommand(client, redisClient)
 	h.commands["/finish"] = commands.NewFinishCommand(client, redisClient)
 	h.commands["/comeback"] = commands.NewComebackCommand(client, redisClient)
+	h.commands["/cancel_last"] = commands.NewCancelLastCommand(client, redisClient)
 
 	return h
 }
