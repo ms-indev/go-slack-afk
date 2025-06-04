@@ -7,7 +7,6 @@ import (
 	"github.com/pyama86/slack-afk/go/presentation/blocks"
 	"github.com/pyama86/slack-afk/go/store"
 	"github.com/slack-go/slack"
-	"golang.org/x/oauth2/google"
 	"github.com/pyama86/slack-afk/go/spreadsheet"
 )
 
