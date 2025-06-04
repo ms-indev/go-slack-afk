@@ -58,18 +58,16 @@ func (c *StartCommand) Execute(cmd slack.SlashCommand) error {
 		return err
 	}
 
-	// Google Sheets 打刻処理
+	// Google Sheets 打刻処理（簿記型）
 	spreadsheetID := os.Getenv("SPREADSHEET_ID")
 	if spreadsheetID == "" {
 		slog.Error("SPREADSHEET_ID is not set in environment variables")
 		return fmt.Errorf("SPREADSHEET_ID is not set in environment variables")
 	}
-	sheetName := userName
 	dateStr := now.Format("2006-01-02")
 	startTimeStr := now.Format("15:04:05")
-
 	go func() {
-		err := writeStartToSheet(spreadsheetID, sheetName, dateStr, startTimeStr)
+		err := writeStartToSheet(spreadsheetID, userName, dateStr, startTimeStr)
 		if err != nil {
 			msg := fmt.Sprintf(":warning: スプレッドシートへの打刻に失敗しました: %v", err)
 			c.client.PostEphemeral(channelID, uid, slack.MsgOptionText(msg, false))
@@ -99,8 +97,8 @@ func (c *StartCommand) Execute(cmd slack.SlashCommand) error {
 	return nil
 }
 
-// Google Sheetsに出勤打刻を追記する関数
-func writeStartToSheet(spreadsheetID, sheetName, dateStr, startTimeStr string) error {
+// Google Sheetsに出勤打刻を1行追記する関数（簿記型）
+func writeStartToSheet(spreadsheetID, userName, dateStr, timeStr string) error {
 	ctx := context.Background()
 	b, err := ioutil.ReadFile("credentials.json")
 	if err != nil {
@@ -115,6 +113,7 @@ func writeStartToSheet(spreadsheetID, sheetName, dateStr, startTimeStr string) e
 		return fmt.Errorf("Sheetsサービス作成失敗: %w", err)
 	}
 
+	sheetName := "打刻記録"
 	// シート存在確認＆なければ作成
 	spreadsheet, err := srv.Spreadsheets.Get(spreadsheetID).Do()
 	if err != nil {
@@ -140,41 +139,19 @@ func writeStartToSheet(spreadsheetID, sheetName, dateStr, startTimeStr string) e
 			return fmt.Errorf("シート作成失敗: %w", err)
 		}
 		// ヘッダー行を追加
-		headers := [][]interface{}{{"日付", "出勤時刻", "退勤時刻", "休憩時間", "実働時間", "備考"}}
-		_, err = srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1:F1", &sheets.ValueRange{Values: headers}).ValueInputOption("USER_ENTERED").Do()
+		headers := [][]interface{}{{"日付", "ユーザー名", "打刻種別", "時刻", "備考"}}
+		_, err = srv.Spreadsheets.Values.Append(spreadsheetID, sheetName+"!A1:E1", &sheets.ValueRange{Values: headers}).ValueInputOption("USER_ENTERED").Do()
 		if err != nil {
 			return fmt.Errorf("ヘッダー追加失敗: %w", err)
 		}
 	}
 
-	// 既存の日付行があれば上書き、なければ追記
-	readRange := fmt.Sprintf("%s!A:A", sheetName)
-	resp, err := srv.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
+	// 1打刻1行で追記
+	row := []interface{}{dateStr, userName, "出勤", timeStr, ""}
+	appendRange := fmt.Sprintf("%s!A:E", sheetName)
+	_, err = srv.Spreadsheets.Values.Append(spreadsheetID, appendRange, &sheets.ValueRange{Values: [][]interface{}{row}}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
-		return fmt.Errorf("既存データ取得失敗: %w", err)
-	}
-	rowIndex := -1
-	for i, row := range resp.Values {
-		if len(row) > 0 && row[0] == dateStr {
-			rowIndex = i + 1 // 1-indexed
-			break
-		}
-	}
-	row := []interface{}{dateStr, startTimeStr, "", "", "", ""}
-	if rowIndex > 0 {
-		// 上書き
-		updateRange := fmt.Sprintf("%s!A%d:F%d", sheetName, rowIndex, rowIndex)
-		_, err = srv.Spreadsheets.Values.Update(spreadsheetID, updateRange, &sheets.ValueRange{Values: [][]interface{}{row}}).ValueInputOption("USER_ENTERED").Do()
-		if err != nil {
-			return fmt.Errorf("既存行上書き失敗: %w", err)
-		}
-	} else {
-		// 追記
-		appendRange := fmt.Sprintf("%s!A:F", sheetName)
-		_, err = srv.Spreadsheets.Values.Append(spreadsheetID, appendRange, &sheets.ValueRange{Values: [][]interface{}{row}}).ValueInputOption("USER_ENTERED").Do()
-		if err != nil {
-			return fmt.Errorf("行追加失敗: %w", err)
-		}
+		return fmt.Errorf("行追加失敗: %w", err)
 	}
 	return nil
 }

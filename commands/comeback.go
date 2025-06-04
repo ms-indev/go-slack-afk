@@ -109,27 +109,19 @@ func (c *ComebackCommand) Execute(cmd slack.SlashCommand) error {
 		return err
 	}
 
-	// 休憩終了時刻
-	jst, _ := time.LoadLocation("Asia/Tokyo")
-	now := time.Now().In(jst)
-
-	// Redisから休憩開始時刻を取得
-	lunchStartStr, err := c.redisClient.Get(uid+":lunch_start")
-	if err == nil && lunchStartStr != "" {
-		lunchStart, err := time.Parse(time.RFC3339, lunchStartStr)
-		if err == nil {
-			delta := int(now.Sub(lunchStart).Minutes())
-			// スプレッドシートに休憩時間加算・備考追記・実働時間再計算
-			spreadsheetID := os.Getenv("SPREADSHEET_ID")
-			if spreadsheetID != "" {
-				go func() {
-					err := updateLunchEndToSheet(spreadsheetID, userName, now.Format("2006-01-02"), delta, now.Format("15:04:05"))
-					if err != nil {
-						slog.Error("Failed to update lunch end to sheet", slog.Any("error", err))
-					}
-				}()
+	// Google Sheets 休憩終了打刻処理（簿記型）
+	spreadsheetID := os.Getenv("SPREADSHEET_ID")
+	if spreadsheetID != "" {
+		jst, _ := time.LoadLocation("Asia/Tokyo")
+		now := time.Now().In(jst)
+		dateStr := now.Format("2006-01-02")
+		comebackTimeStr := now.Format("15:04:05")
+		go func() {
+			err := store.AppendKintaiRow(spreadsheetID, dateStr, userName, "休憩終了", comebackTimeStr, "")
+			if err != nil {
+				slog.Error("Failed to append lunch end to sheet", slog.Any("error", err))
 			}
-		}
+		}()
 	}
 
 	return nil
