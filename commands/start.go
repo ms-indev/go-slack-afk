@@ -4,15 +4,9 @@ import (
 	"log/slog"
 	"os"
 	"time"
-
 	"github.com/pyama86/slack-afk/go/presentation/blocks"
 	"github.com/pyama86/slack-afk/go/store"
 	"github.com/slack-go/slack"
-	"context"
-	"fmt"
-	"io/ioutil"
-	"google.golang.org/api/option"
-	"google.golang.org/api/sheets/v4"
 	"golang.org/x/oauth2/google"
 	"github.com/pyama86/slack-afk/go/spreadsheet"
 )
