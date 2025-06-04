@@ -96,15 +96,13 @@ func (c *LunchCommand) Execute(cmd slack.SlashCommand) error {
 		slog.Error("Failed to set lunch start in Redis", slog.Any("error", err))
 	}
 
-	// Google Sheets 休憩開始打刻処理（簿記型）
+	// スプレッドシートに休憩開始を記録
 	spreadsheetID := os.Getenv("SPREADSHEET_ID")
 	if spreadsheetID != "" {
-		dateStr := now.Format("2006-01-02")
-		lunchTimeStr := now.Format("15:04:05")
 		go func() {
-			err := store.AppendKintaiRow(spreadsheetID, dateStr, userName, "休憩開始", lunchTimeStr, text)
+			err := appendLunchNoteToSheet(spreadsheetID, userName, now.Format("2006-01-02"), fmt.Sprintf("休憩開始:%s", now.Format("15:04:05")))
 			if err != nil {
-				slog.Error("Failed to append lunch start to sheet", slog.Any("error", err))
+				slog.Error("Failed to append lunch note to sheet", slog.Any("error", err))
 			}
 		}()
 	}

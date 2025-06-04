@@ -82,18 +82,19 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 		return err
 	}
 
-	// Google Sheets 退勤打刻処理（簿記型）
+	// Google Sheets 退勤打刻処理
 	spreadsheetID := os.Getenv("SPREADSHEET_ID")
 	if spreadsheetID == "" {
 		slog.Error("SPREADSHEET_ID is not set in environment variables")
 		return fmt.Errorf("SPREADSHEET_ID is not set in environment variables")
 	}
-	jst, _ := time.LoadLocation("Asia/Tokyo")
-	now = time.Now().In(jst)
+	sheetName := userName
 	dateStr := now.Format("2006-01-02")
 	finishTimeStr := now.Format("15:04:05")
+	remark := text
+
 	go func() {
-		err := store.AppendKintaiRow(spreadsheetID, dateStr, userName, "退勤", finishTimeStr, text)
+		err := writeFinishToSheet(spreadsheetID, sheetName, dateStr, finishTimeStr, remark)
 		if err != nil {
 			msg := fmt.Sprintf(":warning: スプレッドシートへの退勤打刻に失敗しました: %v", err)
 			c.client.PostEphemeral(channelID, uid, slack.MsgOptionText(msg, false))
