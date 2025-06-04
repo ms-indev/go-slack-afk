@@ -148,20 +148,21 @@ func appendLunchNoteToSheet(spreadsheetID, sheetName, dateStr, note string) erro
 	if rowIndex < 0 {
 		return fmt.Errorf("本日行が見つかりません")
 	}
-	fRange := fmt.Sprintf("%s!F%d", sheetName, rowIndex)
-	fResp, err := srv.Spreadsheets.Values.Get(spreadsheetID, fRange).Do()
+	getRange := fmt.Sprintf("%s!E%d", sheetName, rowIndex)
+	getResp, err := srv.Spreadsheets.Values.Get(spreadsheetID, getRange).Do()
 	if err != nil {
 		return err
 	}
-	fOld := ""
-	if len(fResp.Values) > 0 && len(fResp.Values[0]) > 0 {
-		fOld = fmt.Sprintf("%v", fResp.Values[0][0])
+	oldNote := ""
+	if len(getResp.Values) > 0 && len(getResp.Values[0]) > 0 {
+		oldNote = fmt.Sprintf("%v", getResp.Values[0][0])
 	}
-	fNew := fOld
-	if fOld != "" {
-		fNew += ", "
+	newNote := oldNote
+	if oldNote != "" {
+		newNote += ", "
 	}
-	fNew += note
-	_, err = srv.Spreadsheets.Values.Update(spreadsheetID, fRange, &sheets.ValueRange{Values: [][]interface{}{{fNew}}}).ValueInputOption("USER_ENTERED").Do()
+	newNote += note
+	updateRange := fmt.Sprintf("%s!E%d", sheetName, rowIndex)
+	_, err = srv.Spreadsheets.Values.Update(spreadsheetID, updateRange, &sheets.ValueRange{Values: [][]interface{}{{newNote}}}).ValueInputOption("USER_ENTERED").Do()
 	return err
 }

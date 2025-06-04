@@ -165,7 +165,7 @@ func updateLunchEndToSheet(spreadsheetID, sheetName, dateStr string, addMinutes 
 	if rowIndex < 0 {
 		return fmt.Errorf("本日行が見つかりません")
 	}
-	// 休憩時間加算（D列）
+	// 休憩時間加算
 	dRange := fmt.Sprintf("%s!D%d", sheetName, rowIndex)
 	dResp, err := srv.Spreadsheets.Values.Get(spreadsheetID, dRange).Do()
 	if err != nil {
@@ -180,7 +180,27 @@ func updateLunchEndToSheet(spreadsheetID, sheetName, dateStr string, addMinutes 
 	if err != nil {
 		return err
 	}
-	// 実働時間再計算（E列）
+	// 備考追記
+	eRange := fmt.Sprintf("%s!E%d", sheetName, rowIndex)
+	eResp, err := srv.Spreadsheets.Values.Get(spreadsheetID, eRange).Do()
+	if err != nil {
+		return err
+	}
+	eOld := ""
+	if len(eResp.Values) > 0 && len(eResp.Values[0]) > 0 {
+		eOld = fmt.Sprintf("%v", eResp.Values[0][0])
+	}
+	eNew := eOld
+	if eOld != "" {
+		eNew += ", "
+	}
+	eNew += fmt.Sprintf("休憩終了:%s", endTimeStr)
+	_, err = srv.Spreadsheets.Values.Update(spreadsheetID, eRange, &sheets.ValueRange{Values: [][]interface{}{{eNew}}}).ValueInputOption("USER_ENTERED").Do()
+	if err != nil {
+		return err
+	}
+	// 実働時間再計算
+	// B:出勤, C:退勤, D:休憩(分)
 	bRange := fmt.Sprintf("%s!B%d", sheetName, rowIndex)
 	cRange := fmt.Sprintf("%s!C%d", sheetName, rowIndex)
 	bResp, err := srv.Spreadsheets.Values.Get(spreadsheetID, bRange).Do()
@@ -205,28 +225,9 @@ func updateLunchEndToSheet(spreadsheetID, sheetName, dateStr string, addMinutes 
 			}
 			hh := workMin / 60
 			mm := workMin % 60
-			eRange := fmt.Sprintf("%s!E%d", sheetName, rowIndex)
-			_, _ = srv.Spreadsheets.Values.Update(spreadsheetID, eRange, &sheets.ValueRange{Values: [][]interface{}{{fmt.Sprintf("%02d:%02d", hh, mm)}}}).ValueInputOption("USER_ENTERED").Do()
+			fRange := fmt.Sprintf("%s!F%d", sheetName, rowIndex)
+			_, _ = srv.Spreadsheets.Values.Update(spreadsheetID, fRange, &sheets.ValueRange{Values: [][]interface{}{{fmt.Sprintf("%02d:%02d", hh, mm)}}}).ValueInputOption("USER_ENTERED").Do()
 		}
-	}
-	// 備考追記（F列）
-	fRange := fmt.Sprintf("%s!F%d", sheetName, rowIndex)
-	fResp, err := srv.Spreadsheets.Values.Get(spreadsheetID, fRange).Do()
-	if err != nil {
-		return err
-	}
-	fOld := ""
-	if len(fResp.Values) > 0 && len(fResp.Values[0]) > 0 {
-		fOld = fmt.Sprintf("%v", fResp.Values[0][0])
-	}
-	fNew := fOld
-	if fOld != "" {
-		fNew += ", "
-	}
-	fNew += fmt.Sprintf("休憩終了:%s", endTimeStr)
-	_, err = srv.Spreadsheets.Values.Update(spreadsheetID, fRange, &sheets.ValueRange{Values: [][]interface{}{{fNew}}}).ValueInputOption("USER_ENTERED").Do()
-	if err != nil {
-		return err
 	}
 	return nil
 }
