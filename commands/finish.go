@@ -59,8 +59,8 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 	}
 
 	// Calculate expiration time (until 9:00 AM tomorrow)
-	jst, _ = time.LoadLocation("Asia/Tokyo")
-	now = time.Now().In(jst)
+	jst, _ := time.LoadLocation("Asia/Tokyo")
+	now := time.Now().In(jst)
 	tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, jst)
 	expireDuration := tomorrow.Sub(now)
 	if err := c.redisClient.Expire(uid, expireDuration); err != nil {
@@ -88,7 +88,7 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 		slog.Error("SPREADSHEET_ID is not set in environment variables")
 		return fmt.Errorf("SPREADSHEET_ID is not set in environment variables")
 	}
-	jst, _ = time.LoadLocation("Asia/Tokyo")
+	jst, _ := time.LoadLocation("Asia/Tokyo")
 	now = time.Now().In(jst)
 	dateStr := now.Format("2006-01-02")
 	finishTimeStr := now.Format("15:04:05")
