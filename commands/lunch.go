@@ -8,6 +8,7 @@ import (
 	"github.com/pyama86/slack-afk/go/presentation/blocks"
 	"github.com/pyama86/slack-afk/go/store"
 	"github.com/slack-go/slack"
+	"github.com/pyama86/slack-afk/go/spreadsheet"
 )
 
 // LunchCommand handles the /lunch command
@@ -92,6 +93,14 @@ func (c *LunchCommand) Execute(cmd slack.SlashCommand) error {
 		slog.Error("Failed to post ephemeral message", slog.Any("error", err))
 		return err
 	}
+
+	// 勤怠記録（エラーはログのみ）
+	go func() {
+		err := spreadsheet.AppendAttendanceRecord(c.client, uid, spreadsheet.TypeLunch, text)
+		if err != nil {
+			slog.Error("スプレッドシート勤怠記録失敗", slog.Any("error", err))
+		}
+	}()
 
 	return nil
 }

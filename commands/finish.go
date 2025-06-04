@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 	"golang.org/x/oauth2/google"
+	"github.com/pyama86/slack-afk/go/spreadsheet"
 )
 
 // FinishCommand handles the /finish command
@@ -112,6 +113,14 @@ func (c *FinishCommand) Execute(cmd slack.SlashCommand) error {
 		slog.Error("Failed to post ephemeral message", slog.Any("error", err))
 		return err
 	}
+
+	// 勤怠記録（エラーはログのみ）
+	go func() {
+		err := spreadsheet.AppendAttendanceRecord(c.client, uid, spreadsheet.TypeFinish, text)
+		if err != nil {
+			slog.Error("スプレッドシート勤怠記録失敗", slog.Any("error", err))
+		}
+	}()
 
 	return nil
 }
